@@ -54,38 +54,113 @@ class GEO
     return GEO.new(@lat,@lon-offset)
   end
   
-  def to_s
-    return "#{@lat},#{@lon}"
+  #
+  # = 緯度経度表示
+  # == Args
+  # flg :: falseなら緯度経度表示 trueなら経度緯度表示(Google Earth用)
+  #
+  def to_s(flg=false)
+    return "#{@lat},#{@lon}" unless flg
+    return "#{@lon},#{@lat}"
+  end  
+end
+
+#
+#= 軌跡クラス
+#
+class Route
+  attr_reader :name
+  def initialize(name)
+    @name = name
+    @routePoints = []
   end
+  
+  #
+  #= GEO追加
+  #
+  def add_geo(geo)
+    @routePoints << geo
+  end
+  
+  #
+  #= 1つ前のGEO
+  #
+  def get_prev_geo
+    return @routePoints[-1]
+  end
+
+  #
+  #= 全てのGEOを書き出す(KML用)
+  #
+  def output_all
+    @routePoints.each{ |g|
+      print g.to_s(true)
+    }
+  end
+end
+
+def progress_geo(g)
+  next_geo = get_addressline(g.get_n)
+  if next_geo[0] == $road_name
+    return next_geo[1]
+  end
+
+  next_geo = get_addressline(g.get_e)
+  if next_geo[0] == $road_name
+    return next_geo[1]
+  end
+
+  next_geo = get_addressline(g.get_w)
+  if next_geo[0] == $road_name
+    return next_geo[1]
+  end
+
+  next_geo = get_addressline(g.get_s)
+  if next_geo[0] == $road_name
+    return next_geo[1]
+  end
+
+  return []
 end
 
 #
 #= get_addressline
-#== 緯度経度から道情報を返す
+#== 緯度経度から道名称とそのGEOを返す
 #
 def get_addressline(geo)
   url = "#{PATH_A}#{geo.to_s}#{PATH_B}"
   doc = Nokogiri.HTML(open(url))
   #return "#{doc}(#{geo.to_s})"
-  return "#{doc.xpath(ROUTE_XPATH).text}(#{geo.to_s})"
+  road_name = "#{doc.xpath(ROUTE_XPATH).text}"
+  ng = "#{doc.xpath("//placemark[@id='p1']/point/coordinates").text}".split(',')
+  new_geo = GEO.new(ng[1].to_f, ng[0].to_f)
+  return [road_name, new_geo]
 end
 
 #
 #= main
 #
-lat = 36.260331
+#pp Nokogiri.HTML(open("http://maps.google.com/maps/geo?ll=36.280331,137.439516&output=xml&key=GOOGLE_MAPS_API_KEY&hl=ja&oe=UTF8"))
+lat = 36.280331
 lon = 137.439516
 
-
-#lat.step(38.0, 0.001){ |l|
 g = GEO.new(lat, lon)
-road_name = get_addressline(g)
-puts road_name
-#while(1)
-  #puts get_addressline(g.get_n)
-  #puts get_addressline(g.get_e)
-  #puts get_addressline(g.get_w)
-  puts get_addressline(g.get_s)
-  
-#end
-#}
+#puts g.to_s
+road_info = get_addressline(g)
+$road_name = road_info[0]
+puts $road_name
+
+g = road_info[1]
+puts g.to_s(true)
+=begin
+g = progress_geo(g)
+puts g.to_s(true)
+g = progress_geo(g)
+puts g.to_s(true)
+=end
+while(1)
+  g =progress_geo(g)
+  puts g.to_s(true)
+end
+
+#route = Route.new(road_name
