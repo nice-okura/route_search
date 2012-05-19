@@ -16,6 +16,7 @@ require "rubygems"
 require "open-uri"
 require "nokogiri"
 require "pp"
+require "matrix"
 
 #= Macros
 #PATH = "/maps/geo?ll=36.260331,137.439516&output=xml&key=GOOGLE_MAPS_API_KEY&hl=ja&oe=UTF8"
@@ -23,6 +24,8 @@ ROOT_URL = "http://maps.google.com"
 PATH_A = "http://maps.google.com/maps/geo?ll="
 PATH_B = "&output=xml&hl=ja&oe=UTF8"
 ROUTE_XPATH = "//addressline"
+
+
 
 #
 #=== 緯度経度クラス
@@ -55,7 +58,8 @@ class GEO
     return GEO.new(@lat+_lat, @lon+_lon)
   end
 
-    #
+  
+  #
   #=== self->aの向きを調べる
   #
   def get_dist(a)
@@ -79,6 +83,30 @@ class GEO
     return dist
   end
 
+  #
+  #=== self->a の角度を調べる
+  #
+  def get_angle(a)
+    v1 = self.to_v
+    v2 = a.to_v
+    v = v2 - v1
+    p v
+    v0 = Vector[1, 0]
+    ip = v.inner_product(v0)
+    cos = ip/(v0.r*v.r)
+    sign = cos < 0 ? -1 : 1
+    angle = Math.acos(cos)*(180.0/Math::PI)*sign
+    return angle
+  end
+
+  #
+  #=== Vectorにする((x, y)形式)
+  #
+  def to_v
+    return Vector[@lon, @lat]
+  end
+
+  
 =begin
   #==== 北東側にずらして座標クラスを返す
   def get_ne(offset=0.01) 
@@ -170,8 +198,9 @@ class Route
     when [0, -1]
       dist_array =[[-1, -1], [0, -1], [1, -1]]
     end
-    
-    start_offset.step(0.1, 0.01){ |offset|
+    p @dist
+    start_offset.step(0.5, 0.01){ |offset|
+      
       #puts offset
       dist_array.each{ |dist|
         #      p dist
@@ -248,7 +277,11 @@ p road_info[1]
 $route = Route.new($road_name, g)
 #puts g.to_s(true)
 
-#=begin
+g1 = GEO.new(1, 1)
+g2 = GEO.new(-1, -1)
+
+p g1.get_angle(g2)
+=begin
 while(1)
   g = $route.progress_geo(g)
   break if g == []
@@ -256,5 +289,5 @@ while(1)
 #  break if $route.add_geo(ng) == false
   #puts g.to_s(true)
 end
-#=end
+=end
 $route.output_all
