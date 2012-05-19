@@ -25,6 +25,14 @@ PATH_A = "http://maps.google.com/maps/geo?ll="
 PATH_B = "&output=xml&hl=ja&oe=UTF8"
 ROUTE_XPATH = "//addressline"
 
+DICT_E = [0, 1]
+DICT_NE = [1, 1]
+DICT_N = [1, 0]
+DICT_NW = [1, -1]
+DICT_W = [0, -1]
+DICT_SW = [-1, -1]
+DICT_S = [-1, 0]
+DICR_SE = [-1, 1]
 
 
 #
@@ -69,15 +77,15 @@ class GEO
 
     if d_lat.abs > d_lon.abs
       if d_lat > 0
-        dist = [1, 0]
+        dist = DICT_N
       else
-        dist = [-1, 0]
+        dist = DICT_S
       end
     else
       if d_lon > 0
-        dist = [0, 1]
+        dist = DICT_E
       else
-        dist = [0, -1]
+        dist = DICT_W
       end
     end
     return dist
@@ -91,7 +99,7 @@ class GEO
     v2 = a.to_v
     v = v2 - v1
     p v
-    v0 = Vector[1, 0]
+    v0 = VectorDICT_N
     ip = v.inner_product(v0)
     cos = ip/(v0.r*v.r)
     sign = cos < 0 ? -1 : 1
@@ -164,7 +172,7 @@ class Route
   def initialize(name, geo)
     @name = name
     @route_points = [geo]
-    @dist = [0, 0] # 走査する方向　[1, 0]：北方向 [0, 1]：東方向 [-1, 0]：南方向 [0, -1]：西方向
+    @dist_angle = 0.0 # 走査してる角度
   end
   
   #
@@ -187,16 +195,16 @@ class Route
     start_offset = 0.01
 
     # 北，北東，東，南東，南，南西，西，北東の順
-    dist_array =[[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]
+    dist_array =[DICT_N, DICT_NE, DICT_E, DICT_SE, DICT_S, DICT_SW, DICT_W, DICT_NW]
     case @dist
-    when [1, 0]
-      dist_array =[[1, 0], [1, 1], [1, -1]]
-    when [-1, 0]
-      dist_array =[[-1, 1], [-1, 0], [-1, -1]]
-    when [0, 1]
-      dist_array =[[1, 1], [0, 1], [-1, 1]]
-    when [0, -1]
-      dist_array =[[-1, -1], [0, -1], [1, -1]]
+    when DICT_N
+      dist_array =[DICT_N, DICT_NE, DICT_NW]
+    when DICT_S
+      dist_array =[DICT_SE, DICT_S, DICT_SW]
+    when DICT_E
+      dist_array =[DICT_NE, DICT_E, DICT_SE]
+    when DICT_W
+      dist_array =[DICT_SW, DICT_W, DICT_NW]
     end
     p @dist
     start_offset.step(0.5, 0.01){ |offset|
@@ -214,6 +222,39 @@ class Route
     }
     puts "progress_geo = []"
     return []
+  end
+
+  #
+  #=== 角度から走査する方向(配列)を返す
+  #
+  def get_dist_from_angle(angle)
+    case angle
+    when angle => -45.0 && angle < 45.0
+      # 東方向
+      ret_dist = [DICT_NE, DICT_E, DICT_SE]
+    when angle => 0.0 && angle < 90.0
+      # 北東方向
+      ret_dist = [DICT_E, DICT_NE, DICT_N]
+    when angle => 45.0 && angle < 135.0
+      # 北方向
+      ret_dist = [DICT_NE, DICT_N, DICT_NW]
+    when angle => 90.0 && angle < 180.0
+      # 北西方向
+      ret_dist = [DICT_N, DICT_NW, DICT_W]
+    when angle =< -135.0 || angle > 135.0
+      # 西方向
+      ret_dist = [DICT_NW, DICT_W, DICT_SW]
+    when angle > -180.0 && angle < -90.0
+      # 南西方向
+      ret_dist = [DICT_W, DICT_SW, DICT_S]
+    when angle => -135.0 && angle < -45.0
+      # 南方向
+      ret_dist = [DICT_SW, DICT_S, DICT_SE]
+    when angle => -90.0 && angle < 0.0
+      # 南東方向
+      ret_dist = [DICT_S, DICT_SE, DICT_E]
+    end
+    return ret_dist
   end
   
   #
