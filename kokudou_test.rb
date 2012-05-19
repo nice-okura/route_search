@@ -37,16 +37,49 @@ class GEO
   #
   #==== 値が一緒ならtrue
   #
-  def equal(g)
-    return true if g.lat == @lat && g.lon == @lon
+  def equal(geo)
+    return true if geo.lat == @lat && geo.lon == @lon
     return false
   end
   
-  #==== 北側にずらして座標クラスを返す
-  def get_n(offset=0.01) 
-    return GEO.new(@lat+offset, @lon)
+  #==== 指定した方向にずらして座標クラスを返す
+  #===== Args
+  # lat: -1 : 南方向 0 : ずれなし 1 : 北方向
+  # lon: -1 : 西方向 0 : ずれなし 1 : 東方向
+  #===== Return
+  # GEO
+  #
+  def get_n(lat, lon, offset=0.01) 
+    _lat = offset*lat
+    _lon = offset*lon
+    return GEO.new(@lat+_lat, @lon+_lon)
   end
 
+    #
+  #=== self->aの向きを調べる
+  #
+  def get_dist(a)
+    dist = [0, 0]
+    d_lat = a.lat - self.lat
+    d_lon = a.lon - self.lon
+
+    if d_lat.abs > d_lon.abs
+      if d_lat > 0
+        dist = [1, 0]
+      else
+        dist = [-1, 0]
+      end
+    else
+      if d_lon > 0
+        dist = [0, 1]
+      else
+        dist = [0, -1]
+      end
+    end
+    return dist
+  end
+
+=begin
   #==== 北東側にずらして座標クラスを返す
   def get_ne(offset=0.01) 
     return GEO.new(@lat+offset, @lon+offset)
@@ -83,7 +116,7 @@ class GEO
   def get_nt(offset=0.01)
     return GEO.new(@lat+offset, @lon-offset)
   end
-
+=end
   #
   #=== 緯度経度表示
   #==== Args
@@ -103,23 +136,64 @@ class Route
   def initialize(name, geo)
     @name = name
     @route_points = [geo]
+    @dist = [0, 0] # 走査する方向　[1, 0]：北方向 [0, 1]：東方向 [-1, 0]：南方向 [0, -1]：西方向
   end
   
   #
   #=== GEO追加
   #
   def add_geo(geo)
-    p geo
+    #p geo
+    
     return false if check_dup(geo)
     @route_points << geo
+    @dist = @route_points[0].get_dist(geo)
     return true
+  end
+
+  #
+  #=== GEOを進めて，routeにないGEOを返す
+  #
+  def progress_geo(g)
+    #puts "基準：#{g}"
+    start_offset = 0.01
+
+    # 北，北東，東，南東，南，南西，西，北東の順
+    dist_array =[[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]
+    case @dist
+    when [1, 0]
+      dist_array =[[1, 0], [1, 1], [1, -1]]
+    when [-1, 0]
+      dist_array =[[-1, 1], [-1, 0], [-1, -1]]
+    when [0, 1]
+      dist_array =[[1, 1], [0, 1], [-1, 1]]
+    when [0, -1]
+      dist_array =[[-1, -1], [0, -1], [1, -1]]
+    end
+    
+    start_offset.step(0.1, 0.01){ |offset|
+      #puts offset
+      dist_array.each{ |dist|
+        #      p dist
+        next_geo = get_addressline(g.get_n(dist[0], dist[1], offset))
+        #      puts next_geo[0]
+        if next_geo[0] == $road_name && $route.check_dup(next_geo[1]) == false
+          #p next_geo[1]
+          return next_geo[1]
+        end
+      }
+    }
+    puts "progress_geo = []"
+    return []
   end
   
   #
-  #=== 1つ前のGEO
+  #=== 道順にソート(点間距離が最小になるように)
   #
-  def get_prev_geo
-    return @route_points[-1]
+  def sort
+    @route_points.each{ |a|
+      
+    }
   end
 
   def check_dup(g)
@@ -134,43 +208,12 @@ class Route
   #
   def output_all
     @route_points.each{ |g|
-      print g.to_s(true)
+      print "#{g.to_s(true)} "
     }
   end
 end
 
-#
-#=== GEOを進めて，routeにないGEOを返す
-#
-def progress_geo(g)
-  offset = 0.01
-  next_geo = get_addressline(g.get_n(offset))
-  #p $route
-  p next_geo[1]
-  
-  if next_geo[0] == $road_name #&& $route.check_dup(next_geo[1]) == false
-    ret_geo = next_geo[1]
-    return next_geo[1]
-  end
 
-  next_geo = get_addressline(g.get_e(offset))
-  if next_geo[0] == $road_name #&& $route.check_dup(next_geo[1]) == false
-    return next_geo[1]
-  end
-
-  next_geo = get_addressline(g.get_w(offset))
-  if next_geo[0] == $road_name #&& $route.check_dup(next_geo[1]) == false
-    return next_geo[1]
-  end
-
-  next_geo = get_addressline(g.get_s(offset))
-  if next_geo[0] == $road_name #&& $route.check_dup(next_geo[1]) == false
-    return next_geo[1]
-  end
-  
-  puts "progress_geo = []"
-  return ret_geo
-end
 
 #
 #=== get_addressline
@@ -205,8 +248,13 @@ p road_info[1]
 $route = Route.new($road_name, g)
 #puts g.to_s(true)
 
+#=begin
 while(1)
-  ng = progress_geo(g)
-  break if $route.add_geo(ng) == false
+  g = $route.progress_geo(g)
+  break if g == []
+  $route.add_geo(g)
+#  break if $route.add_geo(ng) == false
   #puts g.to_s(true)
 end
+#=end
+$route.output_all
