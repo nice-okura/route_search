@@ -25,15 +25,16 @@ PATH_A = "http://maps.google.com/maps/geo?ll="
 PATH_B = "&output=xml&hl=ja&oe=UTF8"
 ROUTE_XPATH = "//addressline"
 
-DICT_E = [0, 1]
-DICT_NE = [1, 1]
-DICT_N = [1, 0]
-DICT_NW = [1, -1]
-DICT_W = [0, -1]
-DICT_SW = [-1, -1]
-DICT_S = [-1, 0]
-DICR_SE = [-1, 1]
+DIRECT_E = [0, 1]
+DIRECT_NE = [1, 1]
+DIRECT_N = [1, 0]
+DIRECT_NW = [1, -1]
+DIRECT_W = [0, -1]
+DIRECT_SW = [-1, -1]
+DIRECT_S = [-1, 0]
+DIRECT_SE = [-1, 1]
 
+YURUME = false
 
 #
 #=== 緯度経度クラス
@@ -70,25 +71,25 @@ class GEO
   #
   #=== self->aの向きを調べる
   #
-  def get_dist(a)
-    dist = [0, 0]
+  def get_direct(a)
+    direct = [0, 0]
     d_lat = a.lat - self.lat
     d_lon = a.lon - self.lon
 
     if d_lat.abs > d_lon.abs
       if d_lat > 0
-        dist = DICT_N
+        direct = DIRECT_N
       else
-        dist = DICT_S
+        direct = DIRECT_S
       end
     else
       if d_lon > 0
-        dist = DICT_E
+        direct = DIRECT_E
       else
-        dist = DICT_W
+        direct = DIRECT_W
       end
     end
-    return dist
+    return direct
   end
 
   #
@@ -98,8 +99,7 @@ class GEO
     v1 = self.to_v
     v2 = a.to_v
     v = v2 - v1
-    p v
-    v0 = VectorDICT_N
+    v0 = Vector[1, 0]
     ip = v.inner_product(v0)
     cos = ip/(v0.r*v.r)
     sign = cos < 0 ? -1 : 1
@@ -114,45 +114,6 @@ class GEO
     return Vector[@lon, @lat]
   end
 
-  
-=begin
-  #==== 北東側にずらして座標クラスを返す
-  def get_ne(offset=0.01) 
-    return GEO.new(@lat+offset, @lon+offset)
-  end
-  
-  #==== 東側にずらして座標クラスを返す
-  def get_e(offset=0.01) 
-    return GEO.new(@lat,@lon+offset)
-  end
-
-  #==== 東南側にずらして座標クラスを返す
-  def get_es(offset=0.01) # 南
-    return GEO.new(@lat-offset, @lon+offset)
-  end
-  
-  #==== 南側にずらして座標クラスを返す
-  def get_s(offset=0.01) # 南
-    return GEO.new(@lat-offset,@lon)
-  end
-  
-  
-  #==== 南西側にずらして座標クラスを返す
-  def get_sw(offset=0.01)
-    return GEO.new(@lat-offset, @lon-offset)
-  end
-  
-
-  #==== 西側にずらして座標クラスを返す
-  def get_w(offset=0.01)
-    return GEO.new(@lat, @lon-offset)
-  end
-
-  #==== 北西側にずらして座標クラスを返す
-  def get_nt(offset=0.01)
-    return GEO.new(@lat+offset, @lon-offset)
-  end
-=end
   #
   #=== 緯度経度表示
   #==== Args
@@ -172,7 +133,7 @@ class Route
   def initialize(name, geo)
     @name = name
     @route_points = [geo]
-    @dist_angle = 0.0 # 走査してる角度
+    @direct_angle = 0.0 # 走査してる角度
   end
   
   #
@@ -182,8 +143,8 @@ class Route
     #p geo
     
     return false if check_dup(geo)
+    @direct_angle = @route_points[-1].get_angle(geo)
     @route_points << geo
-    @dist = @route_points[0].get_dist(geo)
     return true
   end
 
@@ -195,28 +156,23 @@ class Route
     start_offset = 0.01
 
     # 北，北東，東，南東，南，南西，西，北東の順
-    dist_array =[DICT_N, DICT_NE, DICT_E, DICT_SE, DICT_S, DICT_SW, DICT_W, DICT_NW]
-    case @dist
-    when DICT_N
-      dist_array =[DICT_N, DICT_NE, DICT_NW]
-    when DICT_S
-      dist_array =[DICT_SE, DICT_S, DICT_SW]
-    when DICT_E
-      dist_array =[DICT_NE, DICT_E, DICT_SE]
-    when DICT_W
-      dist_array =[DICT_SW, DICT_W, DICT_NW]
-    end
-    p @dist
-    start_offset.step(0.5, 0.01){ |offset|
-      
-      #puts offset
-      dist_array.each{ |dist|
-        #      p dist
-        next_geo = get_addressline(g.get_n(dist[0], dist[1], offset))
+    #direct_array =[DIRECT_N, DIRECT_NE, DIRECT_E, DIRECT_SE, DIRECT_S, DIRECT_SW, DIRECT_W, DIRECT_NW]
+    p @direct_angle
+    direct_array = get_direct_from_angle(@direct_angle)
+    #p direct_array
+    start_offset.step(0.5, 0.001){ |offset|
+      puts "#{offset}"
+      direct_array.each{ |direct|
+        #      p direct
+        next_geo = get_addressline(g.get_n(direct[0], direct[1], offset))
         #      puts next_geo[0]
         if next_geo[0] == $road_name && $route.check_dup(next_geo[1]) == false
           #p next_geo[1]
           return next_geo[1]
+        elsif YURUME && next_geo[0].include?("国道") && $route.check_dup(next_geo[1]) == false
+          # ゆるい設定
+          return next_geo[1]
+
         end
       }
     }
@@ -227,34 +183,34 @@ class Route
   #
   #=== 角度から走査する方向(配列)を返す
   #
-  def get_dist_from_angle(angle)
-    case angle
-    when angle => -45.0 && angle < 45.0
+  def get_direct_from_angle(angle)
+    ret_direct = []
+    if angle >= -45.0 and angle < 45.0
       # 東方向
-      ret_dist = [DICT_NE, DICT_E, DICT_SE]
-    when angle => 0.0 && angle < 90.0
+      ret_direct = [DIRECT_NE, DIRECT_E, DIRECT_SE]
+    elsif angle >= 0.0 && angle < 90.0
       # 北東方向
-      ret_dist = [DICT_E, DICT_NE, DICT_N]
-    when angle => 45.0 && angle < 135.0
+      ret_direct = [DIRECT_E, DIRECT_NE, DIRECT_N]
+    elsif angle >= 45.0 && angle < 135.0
       # 北方向
-      ret_dist = [DICT_NE, DICT_N, DICT_NW]
-    when angle => 90.0 && angle < 180.0
+      ret_direct = [DIRECT_NE, DIRECT_N, DIRECT_NW]
+    elsif angle >= 90.0 && angle < 180.0
       # 北西方向
-      ret_dist = [DICT_N, DICT_NW, DICT_W]
-    when angle =< -135.0 || angle > 135.0
+      ret_direct = [DIRECT_N, DIRECT_NW, DIRECT_W]
+    elsif angle <= -135.0 || angle > 135.0
       # 西方向
-      ret_dist = [DICT_NW, DICT_W, DICT_SW]
-    when angle > -180.0 && angle < -90.0
+      ret_direct = [DIRECT_NW, DIRECT_W, DIRECT_SW]
+    elsif angle > -180.0 && angle < -90.0
       # 南西方向
-      ret_dist = [DICT_W, DICT_SW, DICT_S]
-    when angle => -135.0 && angle < -45.0
+      ret_direct = [DIRECT_W, DIRECT_SW, DIRECT_S]
+    elsif angle >= -135.0 && angle < -45.0
       # 南方向
-      ret_dist = [DICT_SW, DICT_S, DICT_SE]
-    when angle => -90.0 && angle < 0.0
+      ret_direct = [DIRECT_SW, DIRECT_S, DIRECT_SE]
+    elsif angle >= -90.0 && angle < 0.0
       # 南東方向
-      ret_dist = [DICT_S, DICT_SE, DICT_E]
+      ret_direct = [DIRECT_S, DIRECT_SE, DIRECT_E]
     end
-    return ret_dist
+    return ret_direct
   end
   
   #
@@ -265,7 +221,7 @@ class Route
       
     }
   end
-
+  
   def check_dup(g)
     @route_points.each{ |geo|
       return true if geo.equal(g)
@@ -318,17 +274,18 @@ p road_info[1]
 $route = Route.new($road_name, g)
 #puts g.to_s(true)
 
-g1 = GEO.new(1, 1)
-g2 = GEO.new(-1, -1)
+g1 = GEO.new(36.2046005, 137.5515338)
+#g2 = GEO.new(-1, -1)
+#p g1.get_angle(g2)
 
-p g1.get_angle(g2)
-=begin
+#=begin
 while(1)
   g = $route.progress_geo(g)
   break if g == []
   $route.add_geo(g)
+  puts g.to_s
 #  break if $route.add_geo(ng) == false
   #puts g.to_s(true)
 end
-=end
+#=end
 $route.output_all
