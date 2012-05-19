@@ -18,28 +18,45 @@ require "nokogiri"
 require "pp"
 require "matrix"
 
-#= Macros
+#=== Macros
 #PATH = "/maps/geo?ll=36.260331,137.439516&output=xml&key=GOOGLE_MAPS_API_KEY&hl=ja&oe=UTF8"
-ROOT_URL = "http://maps.google.com"
+
+#==== googlemapのドメイン
+ROOT_URL = "http://maps.google.com" 
+#==== PATH前半
 PATH_A = "http://maps.google.com/maps/geo?ll="
+#==== PATH後半
 PATH_B = "&output=xml&hl=ja&oe=UTF8"
+#==== 国道検出のXPATH
 ROUTE_XPATH = "//addressline"
 
+#==== 方角マクロ
+#==== 東
 DIRECT_E = [0, 1]
+#==== 北東
 DIRECT_NE = [1, 1]
+#==== 北
 DIRECT_N = [1, 0]
+#==== 北西
 DIRECT_NW = [1, -1]
+#==== 西
 DIRECT_W = [0, -1]
+#==== 南西
 DIRECT_SW = [-1, -1]
+#==== 南
 DIRECT_S = [-1, 0]
+#==== 南東
 DIRECT_SE = [-1, 1]
 
+#==== 国道重複区間用検出ゆるめフラグ
 YURUME = false
 
 #
 #=== 緯度経度クラス
 #
 class GEO
+  
+  # 緯度,経度
   attr_accessor :lat, :lon
   def initialize(lat, lon)
     @lat = lat
@@ -55,10 +72,10 @@ class GEO
   end
   
   #==== 指定した方向にずらして座標クラスを返す
-  #===== Args
+  #===== Param::
   # lat: -1 : 南方向 0 : ずれなし 1 : 北方向
   # lon: -1 : 西方向 0 : ずれなし 1 : 東方向
-  #===== Return
+  #===== Return::
   # GEO
   #
   def get_n(lat, lon, offset=0.01) 
@@ -129,7 +146,12 @@ end
 #== 軌跡クラス
 #
 class Route
+  
+  # ルートの名前
   attr_reader :name
+  
+  # 初期化
+  # Param:: name:ルートの名前 geo:初期GEO
   def initialize(name, geo)
     @name = name
     @route_points = [geo]
@@ -150,7 +172,8 @@ class Route
 
   #
   #=== GEOを進めて，routeにないGEOを返す
-  #
+  # Param:: g:基点GEO
+  # Return:: 次のGEO
   def progress_geo(g)
     #puts "基準：#{g}"
     start_offset = 0.01
@@ -182,7 +205,7 @@ class Route
 
   #
   #=== 角度から走査する方向(配列)を返す
-  #
+  # Param:: 角度
   def get_direct_from_angle(angle)
     ret_direct = []
     if angle >= -45.0 and angle < 45.0
@@ -222,6 +245,9 @@ class Route
     }
   end
   
+  #
+  #=== ルート内に重複するGEOがあるかどうか
+  #
   def check_dup(g)
     @route_points.each{ |geo|
       return true if geo.equal(g)
